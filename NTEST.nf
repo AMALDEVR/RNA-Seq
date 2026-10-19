@@ -1,4 +1,4 @@
-params.fastq ="/media/amal-dev-r/ExternalHDD/RNA-seq/test/*.fastq.gz"
+params.fastq ="/media/amal-dev-r/ExternalHDD/RNA-seq/test/*{1,2}.fastq.gz"
 params.fastqc ="/media/amal-dev-r/ExternalHDD/RNA-seq/RESULTS/Fastp_results/*_clean.fastq.gz"
 
 process FASTP{
@@ -6,14 +6,16 @@ process FASTP{
     publishDir '/media/amal-dev-r/ExternalHDD/RNA-seq/RESULTS/Fastp_results', mode: 'copy'
 
     input:
-    path fastq
+    tuple val(sample_id), path(reads)
 
     output: 
-    path "*"
+    tuple val(sample_id),
+    path("${sample_id}_1_clean.fastq.gz"),
+    path("${sample_id}_2_clean.fastq.gz"), emit:cleaned_reads
 
     script:
     """
-    fastp -i $fastq -o ${fastq.baseName}_clean.fastq.gz
+    fastp -i ${reads[0]} -I ${reads[1]} -o ${sample_id}_1_clean.fastq.gz -O ${sample_id}_2_clean.fastq.gz
     """
 }
 
@@ -22,23 +24,59 @@ process FASTQC {
     publishDir '/media/amal-dev-r/ExternalHDD/RNA-seq/RESULTS/Fastqc_results', mode: 'copy'
 
     input:
-    path fastpq
+    tuple val(sample_id), path(reads1), path(reads2)
 
     output: 
     path "*"
 
     script:
     """
-    fastqc $fastpq
+    fastqc ${reads1} ${reads2}
     """
 }
 
-workflow {
-    fastp_ch = Channel.fromPath(params.fastq)
-    FASTP(fastp_ch)
-    FASTP.out.view()
+process MULTIQC {
+    container 'biocontainers/multiqc:v1.9_cv1'
+    publishDir '/media/amal-dev-r/ExternalHDD/RNA-seq/RESULTS/Multiqc_results', mode: 'copy'
 
-    fastqc_ch = Channel.fromPath(params.fastqc)
-    FASTQC(fastqc_ch)
-    FASTQC.out.view()
+    input:
+    path fastqc_results
+
+    output: 
+    path "*"
+
+    script:
+    """
+    multiqc ${fastqc_results}
+    """
+}
+/*
+process SALMON {
+    container 'biocontainers/salmon:v1.5.2_cv1'
+    publishDir '/media/amal-dev-r/ExternalHDD/RNA-seq/RESULTS/Salmon_results', mode: 'copy'
+
+    input:
+    tuple val(sample_id),
+    path (read1),
+    path (read2)
+
+    output: 
+    path "*"
+
+    script:
+    """
+    salmon quant -i /home/amal-dev-r/Documents/self_project/RNA_seq/salmon_ref/Salmon_index -l A -1 ${read1} -2 ${read2} -p 4 --validateMappings -o /media/amal-dev-r/ExternalHDD/RNA-seq/RESULTS/Salmon_output/${sample_id}_quant
+    """
+}
+*/
+workflow {
+    fastp_ch = Channel.fromFilePairs(params.fastq, checkIfExists: true)
+    FASTP(fastp_ch) 
+    FASTP.out.cleaned_reads.view()
+    
+    FASTQC(FASTP.out.cleaned_reads)
+    MULTIQC(FASTQC.out.fastqc)
+    /*
+    SALMON(FASTP.out.cleaned_reads)
+    */
 }
