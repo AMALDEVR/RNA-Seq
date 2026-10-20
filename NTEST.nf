@@ -27,7 +27,8 @@ process FASTQC {
     tuple val(sample_id), path(reads1), path(reads2)
 
     output: 
-    path "*"
+    path "*.html", emit:html
+    path "*.zip", emit:zip
 
     script:
     """
@@ -36,7 +37,7 @@ process FASTQC {
 }
 
 process MULTIQC {
-    container 'biocontainers/multiqc:v1.9_cv1'
+   /* container 'quay.io/biocontainers/multiqc:1.21--pyhdfd78af_0' */
     publishDir '/media/amal-dev-r/ExternalHDD/RNA-seq/RESULTS/Multiqc_results', mode: 'copy'
 
     input:
@@ -47,7 +48,7 @@ process MULTIQC {
 
     script:
     """
-    multiqc ${fastqc_results}
+    multiqc .
     """
 }
 /*
@@ -75,7 +76,7 @@ workflow {
     FASTP.out.cleaned_reads.view()
     
     FASTQC(FASTP.out.cleaned_reads)
-    MULTIQC(FASTQC.out.fastqc)
+    MULTIQC(FASTQC.out.zip)
     /*
     SALMON(FASTP.out.cleaned_reads)
     */
